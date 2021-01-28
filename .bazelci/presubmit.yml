@@ -31,6 +31,7 @@ tasks:
     # Skip tests for dylib support on osx, since we don't support it yet.
     - "-@examples//ffi/rust_calling_c:matrix_dylib_test"
     - "-@examples//ffi/rust_calling_c:matrix_dynamically_linked"
+    - "-@examples//ffi/rust_calling_cc:matrix_dynamically_linked"
     - "-@examples//ffi/rust_calling_c/simple/..."
     build_targets: *osx_targets
     test_targets: *osx_targets
@@ -56,6 +57,7 @@ tasks:
     - "@examples//..."
     - "-@examples//ffi/rust_calling_c:matrix_dylib_test"
     - "-@examples//ffi/rust_calling_c:matrix_dynamically_linked"
+    - "-@examples//ffi/rust_calling_cc:matrix_dynamically_linked"
     - "-@examples//ffi/rust_calling_c/simple/..."
     - "-@examples//hello_sys/..."
     - "-@examples//complex_sys/..."

@@ -13,7 +13,7 @@
 # limitations under the License.
 
 # buildifier: disable=module-docstring
-load("//rust:private/utils.bzl", "find_toolchain", "get_libs_for_static_executable")
+load("//rust:private/utils.bzl", "find_cc_toolchain", "find_toolchain", "get_libs_for_static_executable")
 load("//rust:rust.bzl", "rust_library")
 
 def rust_bindgen_library(
@@ -53,6 +53,7 @@ def rust_bindgen_library(
 
 def _rust_bindgen_impl(ctx):
     rust_toolchain = find_toolchain(ctx)
+    cc_toolchain, feature_configuration = find_cc_toolchain(ctx)
 
     # nb. We can't grab the cc_library`s direct headers, so a header must be provided.
     cc_lib = ctx.attr.cc_lib
@@ -82,7 +83,7 @@ def _rust_bindgen_impl(ctx):
     output = ctx.outputs.out
 
     # libclang should only have 1 output file
-    libclang_dir = get_libs_for_static_executable(libclang).to_list()[0].dirname
+    libclang_dir = get_libs_for_static_executable(libclang, cc_toolchain, feature_configuration).to_list()[0].dirname
     include_directories = cc_lib[CcInfo].compilation_context.includes.to_list()
     quote_include_directories = cc_lib[CcInfo].compilation_context.quote_includes.to_list()
     system_include_directories = cc_lib[CcInfo].compilation_context.system_includes.to_list()
@@ -110,7 +111,7 @@ def _rust_bindgen_impl(ctx):
     }
 
     if libstdcxx:
-        env["LD_LIBRARY_PATH"] = ":".join([f.dirname for f in get_libs_for_static_executable(libstdcxx).to_list()])
+        env["LD_LIBRARY_PATH"] = ":".join([f.dirname for f in get_libs_for_static_executable(libstdcxx, cc_toolchain, feature_configuration).to_list()])
 
     ctx.actions.run(
         executable = bindgen_bin,
@@ -118,9 +119,9 @@ def _rust_bindgen_impl(ctx):
             [header],
             transitive = [
                 cc_lib[CcInfo].compilation_context.headers,
-                get_libs_for_static_executable(libclang),
+                get_libs_for_static_executable(libclang, cc_toolchain, feature_configuration),
             ] + [
-                get_libs_for_static_executable(libstdcxx),
+                get_libs_for_static_executable(libstdcxx, cc_toolchain, feature_configuration),
             ] if libstdcxx else [],
         ),
         outputs = [unformatted_output],
@@ -173,11 +174,16 @@ rust_bindgen = rule(
             allow_single_file = True,
             cfg = "exec",
         ),
+        "_cc_toolchain": attr.label(
+            default = Label("@bazel_tools//tools/cpp:current_cc_toolchain"),
+        ),
     },
     outputs = {"out": "%{name}.rs"},
+    fragments = ["cpp"],
     toolchains = [
         str(Label("//bindgen:bindgen_toolchain")),
         str(Label("//rust:toolchain")),
+        "@bazel_tools//tools/cpp:toolchain_type",
     ],
 )
 

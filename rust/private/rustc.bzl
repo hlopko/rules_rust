@@ -17,10 +17,10 @@ load(
     "@bazel_tools//tools/build_defs/cc:action_names.bzl",
     "CPP_LINK_EXECUTABLE_ACTION_NAME",
 )
-load("@bazel_tools//tools/cpp:toolchain_utils.bzl", "find_cpp_toolchain")
 load(
     "//rust:private/utils.bzl",
     "expand_locations",
+    "find_cc_toolchain",
     "get_lib_name",
     "get_libs_for_static_executable",
     "relativize",
@@ -129,7 +129,7 @@ def get_compilation_mode_opts(ctx, toolchain):
 
     return toolchain.compilation_mode_opts[comp_mode]
 
-def collect_deps(label, deps, proc_macro_deps, aliases, toolchain):
+def collect_deps(label, deps, proc_macro_deps, aliases, toolchain, cc_toolchain, feature_configuration):
     """Walks through dependencies and collects the transitive dependencies.
 
     Args:
@@ -138,6 +138,8 @@ def collect_deps(label, deps, proc_macro_deps, aliases, toolchain):
         proc_macro_deps (list): The proc_macro deps from ctx.attr.proc_macro_deps.
         aliases (dict): A dict mapping aliased targets to their actual Crate information.
         toolchain (rust_toolchain): The current `rust_toolchain`.
+        cc_toolchain (CcToolchainInfo): The current `cc_toolchain`.
+        feature_configuration (FeatureConfiguration): The current `feature_configuration` to use with `cc_toolchain`.
 
     Returns:
         tuple: Returns a tuple (DepInfo, BuildInfo) of providers.
@@ -188,7 +190,7 @@ def collect_deps(label, deps, proc_macro_deps, aliases, toolchain):
             # This dependency is a cc_library
 
             # TODO: We could let the user choose how to link, instead of always preferring to link static libraries.
-            libs = get_libs_for_static_executable(dep)
+            libs = get_libs_for_static_executable(dep, cc_toolchain, feature_configuration)
 
             transitive_dylibs.append(depset([
                 lib
@@ -230,25 +232,6 @@ def collect_deps(label, deps, proc_macro_deps, aliases, toolchain):
         ),
         build_info,
     )
-
-def get_cc_toolchain(ctx):
-    """Extracts a CcToolchain from the current target's context
-
-    Args:
-        ctx (ctx): The current target's rule context object
-
-    Returns:
-        tuple: A tuple of (CcToolchain, FeatureConfiguration)
-    """
-    cc_toolchain = find_cpp_toolchain(ctx)
-
-    feature_configuration = cc_common.configure_features(
-        ctx = ctx,
-        cc_toolchain = cc_toolchain,
-        requested_features = ctx.features,
-        unsupported_features = ctx.disabled_features,
-    )
-    return cc_toolchain, feature_configuration
 
 def get_cc_user_link_flags(ctx):
     """Get the current target's linkopt flags
@@ -335,16 +318,18 @@ def collect_inputs(
         file,
         files,
         toolchain,
+        cc_toolchain,
         crate_info,
         dep_info,
         build_info):
     """Gather's the inputs and required input information for a rustc action
 
     Args:
-        ctx (ctx): The rule's context object
+        ctx (ctx): The rule's context object.
         file (struct): A struct containing files defined in label type attributes marked as `allow_single_file`.
-        files (list): A list of all inputs
-        toolchain (rust_toolchain): The current `rust_toolchain`
+        files (list): A list of all inputs.
+        toolchain (rust_toolchain): The current `rust_toolchain`.
+        cc_toolchain (CcToolchainInfo): The current `cc_toolchain`.
         crate_info (CrateInfo): The Crate information of the crate to process build scripts for.
         dep_info (DepInfo): The target Crate's dependency information.
         build_info (BuildInfo): The target Crate's build settings.
@@ -354,7 +339,7 @@ def collect_inputs(
     """
     linker_script = getattr(file, "linker_script") if hasattr(file, "linker_script") else None
 
-    linker_depset = find_cpp_toolchain(ctx).all_files
+    linker_depset = cc_toolchain.all_files
 
     compile_inputs = depset(
         crate_info.srcs +
@@ -572,12 +557,16 @@ def rustc_compile_action(
             - (DepInfo): The transitive dependencies of this crate.
             - (DefaultInfo): The output file for this crate, and its runfiles.
     """
+    cc_toolchain, feature_configuration = find_cc_toolchain(ctx)
+
     dep_info, build_info = collect_deps(
         ctx.label,
         crate_info.deps,
         crate_info.proc_macro_deps,
         crate_info.aliases,
         toolchain,
+        cc_toolchain,
+        feature_configuration,
     )
 
     compile_inputs, out_dir, build_env_file, build_flags_files = collect_inputs(
@@ -585,12 +574,11 @@ def rustc_compile_action(
         ctx.file,
         ctx.files,
         toolchain,
+        cc_toolchain,
         crate_info,
         dep_info,
         build_info,
     )
-
-    cc_toolchain, feature_configuration = get_cc_toolchain(ctx)
 
     args, env = construct_arguments(
         ctx,

@@ -14,6 +14,8 @@
 
 """Utility functions not specific to the rust toolchain."""
 
+load("@bazel_tools//tools/cpp:toolchain_utils.bzl", find_rules_cc_toolchain = "find_cpp_toolchain")
+
 def find_toolchain(ctx):
     """Finds the first rust toolchain that is configured.
 
@@ -24,6 +26,25 @@ def find_toolchain(ctx):
         rust_toolchain: A Rust toolchain context.
     """
     return ctx.toolchains[Label("//rust:toolchain")]
+
+def find_cc_toolchain(ctx):
+    """Extracts a CcToolchain from the current target's context
+
+    Args:
+        ctx (ctx): The current target's rule context object
+
+    Returns:
+        tuple: A tuple of (CcToolchain, FeatureConfiguration)
+    """
+    cc_toolchain = find_rules_cc_toolchain(ctx)
+
+    feature_configuration = cc_common.configure_features(
+        ctx = ctx,
+        cc_toolchain = cc_toolchain,
+        requested_features = ctx.features,
+        unsupported_features = ctx.disabled_features,
+    )
+    return cc_toolchain, feature_configuration
 
 # TODO: Replace with bazel-skylib's `path.dirname`. This requires addressing some
 # dependency issues or generating docs will break.
@@ -97,17 +118,22 @@ def determine_output_hash(crate_root):
     """
     return repr(hash(crate_root.path))
 
-def get_libs_for_static_executable(dep):
+def get_libs_for_static_executable(dep, cc_toolchain, feature_configuration):
     """find the libraries used for linking a static executable.
 
     Args:
         dep (Target): A cc_library target.
+        cc_toolchain (CcToolchainInfo): The current `cc_toolchain`.
+        feature_configuration (FeatureConfiguration): The current `feature_configuration` to use with `cc_toolchain`.
 
     Returns:
         depset: A depset[File]
     """
     linker_inputs = dep[CcInfo].linking_context.linker_inputs.to_list()
-    return depset([_get_preferred_artifact(lib) for li in linker_inputs for lib in li.libraries])
+    return depset(
+        [_get_preferred_artifact(lib) for li in linker_inputs for lib in li.libraries],
+        transitive = [cc_toolchain.static_runtime_lib(feature_configuration = feature_configuration)],
+    )
 
 def _get_preferred_artifact(library_to_link):
     """Get the first available library to link from a LibraryToLink object.
