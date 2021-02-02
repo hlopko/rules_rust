@@ -15,7 +15,7 @@
 load("//rust:rust_common.bzl", "CrateInfo")
 
 # buildifier: disable=module-docstring
-load("//rust/private:rustc.bzl", "DepInfo")
+load("//rust/private:rustc.bzl", "CrateInfo", "DepInfo")
 load("//rust/private:utils.bzl", "find_toolchain", "get_lib_name")
 
 def _rust_doc_test_impl(ctx):

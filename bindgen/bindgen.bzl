@@ -11,9 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 # buildifier: disable=module-docstring
 load("//rust:rust.bzl", "rust_library")
+
 load("//rust/private:utils.bzl", "find_toolchain", "get_libs_for_static_executable")
 
 def rust_bindgen_library(

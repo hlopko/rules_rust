@@ -13,11 +13,13 @@
 # limitations under the License.
 
 # buildifier: disable=module-docstring
+
 load(
-    "//rust:private/clippy.bzl",
+    "//rust/private:clippy.bzl",
     _rust_clippy = "rust_clippy",
     _rust_clippy_aspect = "rust_clippy_aspect",
 )
+
 load(
     "//rust/private:rust.bzl",
     _rust_benchmark = "rust_benchmark",

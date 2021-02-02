@@ -15,3 +15,15 @@ bzl_library(
 
 ############################ UNIT TESTS #############################
 rust_test_suite(name = "rust_test_suite")
+
+bzl_library(
+    name = "rules",
+    srcs = glob(
+        ["**/*.bzl"],
+        exclude = ["**/*_test.bzl"],
+    ),
+    visibility = ["//rust:__subpackages__"],
+    deps = [
+        "//rust/platform:rules",
+    ],
+)
