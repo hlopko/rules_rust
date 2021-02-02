@@ -12,9 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("//rust:rust_common.bzl", "CrateInfo")
+
 # buildifier: disable=module-docstring
-load("//rust:private/rustc.bzl", "CrateInfo", "DepInfo", "add_crate_link_flags", "add_edition_flags")
-load("//rust:private/utils.bzl", "find_toolchain")
+load("//rust/private:rustc.bzl", "DepInfo", "add_crate_link_flags", "add_edition_flags")
+load("//rust/private:utils.bzl", "find_toolchain")
 
 _rust_doc_doc = """Generates code documentation.
 

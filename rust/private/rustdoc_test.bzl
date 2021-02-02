@@ -12,9 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("//rust:rust_common.bzl", "CrateInfo")
+
 # buildifier: disable=module-docstring
-load("//rust:private/rustc.bzl", "CrateInfo", "DepInfo")
-load("//rust:private/utils.bzl", "find_toolchain", "get_lib_name")
+load("//rust/private:rustc.bzl", "DepInfo")
+load("//rust/private:utils.bzl", "find_toolchain", "get_lib_name")
 
 def _rust_doc_test_impl(ctx):
     """The implementation for the `rust_doc_test` rule

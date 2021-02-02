@@ -13,7 +13,7 @@
 # limitations under the License.
 
 # buildifier: disable=module-docstring
-load("//rust:private/transitions.bzl", "wasm_bindgen_transition")
+load("//rust/private:transitions.bzl", "wasm_bindgen_transition")
 
 _WASM_BINDGEN_DOC = """\
 Generates javascript and typescript bindings for a webassembly module.

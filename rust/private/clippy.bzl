@@ -19,13 +19,13 @@ load(
 )
 load(
     "//rust:private/rustc.bzl",
-    "CrateInfo",
     "collect_deps",
     "collect_inputs",
     "construct_arguments",
     "get_cc_toolchain",
 )
-load("//rust:private/utils.bzl", "determine_output_hash", "find_toolchain")
+load("//rust:rust_common.bzl", "CrateInfo")
+load("//rust/private:utils.bzl", "determine_output_hash", "find_toolchain")
 
 _rust_extensions = [
     "rs",

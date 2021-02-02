@@ -1,5 +1,5 @@
-load("@io_bazel_stardoc//stardoc:stardoc.bzl", "stardoc")
 load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
+load("@io_bazel_stardoc//stardoc:stardoc.bzl", "stardoc")
 
 package(default_visibility = ["//visibility:private"])
 
@@ -12,22 +12,31 @@ bzl_library(
         "@bazel_skylib//:workspace",
         "@bazel_skylib//lib:unittest",
         "@bazel_skylib//lib:versions",
+        "@rules_proto//proto:rules",
         "@rules_rust//:rules",
         "@rules_rust//bindgen:rules",
         "@rules_rust//cargo:rules",
         "@rules_rust//proto:rules",
         "@rules_rust//rust:rules",
         "@rules_rust//wasm_bindgen:rules",
-        "@rules_proto//proto:rules",
     ],
 )
 
 PAGES = {
+    "cargo_build_script": [
+        "cargo_build_script",
+    ],
     "rust": [
         "rust_library",
         "rust_binary",
         "rust_benchmark",
         "rust_test",
+    ],
+    "rust_bindgen": [
+        "rust_bindgen_library",
+        "rust_bindgen_repositories",
+        "rust_bindgen_toolchain",
+        "rust_bindgen",
     ],
     "rust_doc": [
         "rust_doc",
@@ -39,26 +48,17 @@ PAGES = {
         "rust_proto_repositories",
         "rust_proto_toolchain",
     ],
-    "rust_bindgen": [
-        "rust_bindgen_library",
-        "rust_bindgen_repositories",
-        "rust_bindgen_toolchain",
-        "rust_bindgen",
-    ],
-    "rust_wasm_bindgen": [
-        "rust_wasm_bindgen_repositories",
-        "rust_wasm_bindgen_toolchain",
-        "rust_wasm_bindgen",
-    ],
-    "cargo_build_script": [
-        "cargo_build_script",
-    ],
     "rust_repositories": [
         "rust_repositories",
         "rust_repository_set",
         "rust_toolchain",
         "rust_toolchain_repository",
         "rust_toolchain_repository_proxy",
+    ],
+    "rust_wasm_bindgen": [
+        "rust_wasm_bindgen_repositories",
+        "rust_wasm_bindgen_toolchain",
+        "rust_wasm_bindgen",
     ],
 }
 
