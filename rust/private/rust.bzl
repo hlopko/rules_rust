@@ -13,8 +13,9 @@
 # limitations under the License.
 
 # buildifier: disable=module-docstring
-load("//rust:private/rustc.bzl", "CrateInfo", "rustc_compile_action")
-load("//rust:private/utils.bzl", "determine_output_hash", "find_toolchain")
+load("//rust:rust_common.bzl", "CrateInfo")
+load("//rust/private:rustc.bzl", "rustc_compile_action")
+load("//rust/private:utils.bzl", "determine_output_hash", "find_toolchain")
 
 # TODO(marco): Separate each rule into its own file.
 

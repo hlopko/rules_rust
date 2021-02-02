@@ -15,8 +15,7 @@ toolchain_type(
 
 bzl_library(
     name = "rules",
-    srcs = glob(["**/*.bzl"]),
     deps = [
-        "//rust/platform:rules",
+        "//rust/private:rules",
     ],
 )

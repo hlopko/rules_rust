@@ -40,8 +40,9 @@ load(
     _generate_proto = "rust_generate_proto",
     _generated_file_stem = "generated_file_stem",
 )
-load("//rust:private/rustc.bzl", "CrateInfo", "rustc_compile_action")
-load("//rust:private/utils.bzl", "determine_output_hash", "find_toolchain")
+load("//rust:rust_common.bzl", "CrateInfo")
+load("//rust/private:rustc.bzl", "rustc_compile_action")
+load("//rust/private:utils.bzl", "determine_output_hash", "find_toolchain")
 
 RustProtoInfo = provider(
     doc = "Rust protobuf provider info",
