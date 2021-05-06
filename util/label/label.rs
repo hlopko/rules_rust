@@ -1,6 +1,7 @@
 //! Bazel label parsing library.
 //!
 //! USAGE: `label::analyze("//foo/bar:baz")
+mod label_error;
 use label_error::LabelError;
 
 /// Parse and analyze given str.

@@ -2,16 +2,9 @@ load("//rust:rust.bzl", "rust_library", "rust_test")
 
 rust_library(
     name = "label",
-    srcs = ["label.rs"],
+    srcs = ["label.rs", "label_error.rs"],
     edition = "2018",
     visibility = ["//:__subpackages__"],
-    deps = [":label_error"],
-)
-
-rust_library(
-    name = "label_error",
-    srcs = ["label_error.rs"],
-    edition = "2018",
 )
 
 rust_test(
