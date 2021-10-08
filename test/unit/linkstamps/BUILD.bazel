@@ -1,4 +1,19 @@
-load(":linkstamps_test.bzl", "linkstamps_test_suite")
 
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load("//rust:defs.bzl", "rust_binary", "rust_test")
 ############################ UNIT TESTS #############################
-linkstamps_test_suite(name = "linkstamps_test_suite")
+# linkstamps_test_suite(name = "linkstamps_test_suite")
+
+cc_library(
+    name = "cc_lib_with_linkstamp",
+    linkstamp = select({
+        "//rust/platform:linux": "linkstamp.cc",
+        "//conditions:default": None,
+    }),
+)
+
+rust_binary(
+    name = "bin",
+    srcs = ["foo.rs"],
+    deps = [":cc_lib_with_linkstamp"],
+)
