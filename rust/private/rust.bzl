@@ -581,6 +581,7 @@ _common_providers = [
     rust_common.dep_info,
     DefaultInfo,
 ]
+ProvidedFunctionInfo = provider(fields = {"fn": ""})
 
 def _rust_library_like_impl(ctx):
     """The common implementation of the library-like rules.
@@ -613,9 +614,11 @@ def _rust_library_like_impl(ctx):
     )
     rust_lib = ctx.actions.declare_file(rust_lib_name)
 
+    transform_deps_fn = ctx.attr._transform_deps_fn[ProvidedFunctionInfo].fn
+
     make_rust_providers_target_independent = toolchain._incompatible_make_rust_providers_target_independent
-    deps = transform_deps(ctx.attr.deps, make_rust_providers_target_independent)
-    proc_macro_deps = transform_deps(ctx.attr.proc_macro_deps, make_rust_providers_target_independent)
+    deps = transform_deps_fn(ctx.attr.deps, make_rust_providers_target_independent)
+    proc_macro_deps = transform_deps_fn(ctx.attr.proc_macro_deps, make_rust_providers_target_independent)
 
     return rustc_compile_action(
         ctx = ctx,
@@ -639,12 +642,24 @@ def _rust_library_like_impl(ctx):
         output_hash = output_hash,
     )
 
-def _rust_library_like_rule(crate_type, doc):
+
+def _transform_deps_fn_impl(ctx):
+    return [ProvidedFunctionInfo(fn = transform_deps)]
+
+transform_deps_fn = rule(
+    implementation = _transform_deps_fn_impl,
+    provides = [ProvidedFunctionInfo]
+)
+
+def _rust_library_like_rule(crate_type, doc, extra_attrs = {}, transform_deps_fn = transform_deps):
     return rule(
         implementation = _rust_library_like_impl,
         provides = _common_providers,
         attrs = dict(
-            _common_attrs.items() + {"_crate_type": attr.string(default = crate_type)}.items(),
+            _common_attrs.items() + extra_attrs.items() + {
+                "_crate_type": attr.string(default = crate_type),
+                "_transform_deps_fn": attr.label(default = "//rust/private:transform_deps_fn")
+            }.items(),
         ),
         fragments = ["cpp"],
         host_fragments = ["cpp"],
