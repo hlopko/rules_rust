@@ -677,6 +677,9 @@ def construct_arguments(
     # Set the SYSROOT to the directory of the rust_lib files passed to the toolchain
     env["SYSROOT"] = paths.dirname(toolchain.rust_lib.files.to_list()[0].short_path)
 
+    env["RULES_RUST_RENAME_FIRST_PARTY_CRATES"] = str(toolchain._rename_first_party_crates).lower()
+    env["RULES_RUST_THIRD_PARTY_DIR"] = str(toolchain._third_party_dir).lower()
+
     # extra_rustc_flags apply to the target configuration, not the exec configuration.
     if hasattr(ctx.attr, "_extra_rustc_flags") and is_exec_configuration(ctx):
         rustc_flags.add_all(ctx.attr._extra_rustc_flags[ExtraRustcFlagsInfo].extra_rustc_flags)
