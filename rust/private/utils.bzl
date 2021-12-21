@@ -514,26 +514,21 @@ def _replace_all(string, substitutions):
       this string, and overlap.).
     """
 
-    # Find the highest-priority pattern matches.
+    # Find the highest-priority pattern matches for each string index, going
+    # left-to-right and skipping indices that are already involved in a
+    # pattern match.
     plan = {}
+    matched_indices_set = {}
     for pattern_start in range(len(string)):
-        for subst_index, (pattern, replacement) in enumerate(substitutions):
-            if string.startswith(pattern, pattern_start):
-                plan[pattern_start] = (len(pattern), replacement)
-                break
-
-    # Drop replacements that overlap with a replacement earlier in the string.
-    replaced_indices_set = {}
-    leftmost_plan = {}
-    for pattern_start in sorted(plan.keys()):
-        length, _ = plan[pattern_start]
-        pattern_indices = list(range(pattern_start, pattern_start + length))
-        if any([i in replaced_indices_set for i in pattern_indices]):
+        if pattern_start in matched_indices_set:
             continue
-        replaced_indices_set.update([(i, True) for i in pattern_indices])
-        leftmost_plan[pattern_start] = plan[pattern_start]
-
-    plan = leftmost_plan
+        for (pattern, replacement) in substitutions:
+            if not string.startswith(pattern, pattern_start):
+                continue
+            length = len(pattern)
+            plan[pattern_start] = (length, replacement)
+            matched_indices_set.update([(pattern_start + i, True) for i in range(length)])
+            break
 
     # Execute the replacement plan, working from right to left.
     for pattern_start in sorted(plan.keys(), reverse = True):
