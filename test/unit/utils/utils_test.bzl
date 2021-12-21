@@ -58,7 +58,7 @@ def _encode_label_as_crate_name_test_impl(ctx):
 def _is_third_party_crate_test_impl(ctx):
     env = unittest.begin(ctx)
 
-    # A target at the root of the 3p dir is considered 3p:
+    # A target at the root of the third-party dir is considered third-party:
     asserts.true(env, should_encode_label_in_crate_name("third_party", "//third_party"))
 
     # Targets in subpackages are detected properly:
@@ -66,7 +66,7 @@ def _is_third_party_crate_test_impl(ctx):
     asserts.true(env, should_encode_label_in_crate_name("third_party/serde/v1", "//third_party"))
 
     # Ensure the directory name truly matches, and doesn't just include the
-    # 3p dir as a substring (or vice versa).
+    # third-party dir as a substring (or vice versa).
     asserts.false(env, should_encode_label_in_crate_name("third_party_decoy", "//third_party"))
     asserts.false(env, should_encode_label_in_crate_name("decoy_third_party", "//third_party"))
     asserts.false(env, should_encode_label_in_crate_name("third_", "//third_party"))
