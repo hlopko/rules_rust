@@ -17,6 +17,7 @@ rust_binary(
         "//tools/rust_analyzer/raze:structopt",
         "//util/label",
     ],
+    proc_macro_deps = [ "//util/import",]
 )
 
 rust_library(
@@ -36,6 +37,8 @@ rust_library(
         "//tools/rust_analyzer/raze:serde",
         "//tools/rust_analyzer/raze:serde_json",
     ],
+        proc_macro_deps = [ "//util/import",]
+
 )
 
 rust_test(
