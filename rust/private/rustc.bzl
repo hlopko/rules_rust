@@ -967,8 +967,6 @@ def rustc_compile_action(
     out_binary = getattr(attr, "out_binary", False)
 
     providers = [
-        crate_info,
-        dep_info,
         DefaultInfo(
             # nb. This field is required for cc_library to depend on our output.
             files = depset(outputs),
@@ -976,6 +974,9 @@ def rustc_compile_action(
             executable = crate_info.output if crate_info.type == "bin" or crate_info.is_test or out_binary else None,
         ),
     ]
+    if crate_info.type not in ["cdylib", "staticlib"]:
+        providers.append(crate_info)
+        providers.append(dep_info)
     if toolchain.target_arch != "wasm32":
         providers += establish_cc_info(ctx, attr, crate_info, toolchain, cc_toolchain, feature_configuration, interface_library)
     if pdb_file:

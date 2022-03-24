@@ -249,7 +249,7 @@ def _rust_library_common(ctx, crate_type):
     # deterministic name is important since it ends up embedded in the executable. This is problematic when one needs
     # to include the library with a specific filename into a larger application.
     # (see https://github.com/bazelbuild/rules_rust/issues/405#issuecomment-993089889 for more details)
-    if crate_type != "cdylib":
+    if crate_type not in ["cdylib", "staticlib"]:
         output_hash = determine_output_hash(crate_root, ctx.label)
     else:
         output_hash = None
@@ -731,7 +731,7 @@ rust_library = rule(
 
 rust_static_library = rule(
     implementation = _rust_static_library_impl,
-    provides = _common_providers,
+    provides = [CcInfo],
     attrs = dict(_common_attrs.items()),
     fragments = ["cpp"],
     host_fragments = ["cpp"],
@@ -755,7 +755,7 @@ rust_static_library = rule(
 
 rust_shared_library = rule(
     implementation = _rust_shared_library_impl,
-    provides = _common_providers,
+    provides = [CcInfo],
     attrs = dict(_common_attrs.items()),
     fragments = ["cpp"],
     host_fragments = ["cpp"],
