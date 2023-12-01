@@ -707,7 +707,7 @@ def crate_root_src(name, srcs, crate_type):
     )
     if not crate_root:
         file_names = [default_crate_root_filename, name + ".rs"]
-        fail("No {} source file found.".format(" or ".join(file_names)), "srcs")
+        fail("Couldn't find {} among `srcs`, please use `crate_root` to specify the root file.".format(" or ".join(file_names)))
     return crate_root
 
 def _shortest_src_with_basename(srcs, basename):
