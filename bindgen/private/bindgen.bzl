@@ -201,16 +201,17 @@ def _rust_bindgen_impl(ctx):
 
     cc_toolchain, feature_configuration = find_cc_toolchain(ctx = ctx)
 
-    tools = depset([clang_bin], transitive = [cc_toolchain.all_files])
+    tools = depset(([clang_bin] if clang_bin else []), transitive = [cc_toolchain.all_files])
 
     # libclang should only have 1 output file
     libclang_dir = _get_libs_for_static_executable(libclang).to_list()[0].dirname
 
     env = {
-        "CLANG_PATH": clang_bin.path,
         "LIBCLANG_PATH": libclang_dir,
         "RUST_BACKTRACE": "1",
     }
+    if clang_bin:
+        env["CLANG_PATH"] = clang_bin.path
 
     args = ctx.actions.args()
 
