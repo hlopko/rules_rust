@@ -235,7 +235,7 @@ def _rust_bindgen_impl(ctx):
 
     # Vanilla usage of bindgen produces formatted output, here we do the same if we have `rustfmt` in our toolchain.
     rustfmt_toolchain = ctx.toolchains[Label("//rust/rustfmt:toolchain_type")]
-    if toolchain.default_rustfmt:
+    if rustfmt_toolchain and toolchain.default_rustfmt:
         # Bindgen is able to find rustfmt using the RUSTFMT environment variable
         env.update({"RUSTFMT": rustfmt_toolchain.rustfmt.path})
         tools = depset(transitive = [tools, rustfmt_toolchain.all_files])
@@ -379,10 +379,10 @@ rust_bindgen = rule(
     outputs = {"out": "%{name}.rs"},
     fragments = ["cpp"],
     toolchains = [
-        str(Label("//bindgen:toolchain_type")),
-        str(Label("//rust:toolchain_type")),
-        str(Label("//rust/rustfmt:toolchain_type")),
-        "@bazel_tools//tools/cpp:toolchain_type",
+        config_common.toolchain_type("//bindgen:toolchain_type"),
+        config_common.toolchain_type("//rust:toolchain_type"),
+        config_common.toolchain_type("//rust/rustfmt:toolchain_type", mandatory = False),
+        config_common.toolchain_type("@bazel_tools//tools/cpp:toolchain_type"),
     ],
 )
 
