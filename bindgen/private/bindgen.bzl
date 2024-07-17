@@ -315,6 +315,9 @@ def _rust_bindgen_impl(ctx):
         env = env,
         arguments = [args],
         tools = tools,
+        # ctx.actions.run now require (through a buildifier check) that we
+        # specify this
+        toolchain = None,
     )
 
     return [
