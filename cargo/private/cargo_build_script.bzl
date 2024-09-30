@@ -5,7 +5,7 @@ load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load("@bazel_tools//tools/cpp:toolchain_utils.bzl", "find_cpp_toolchain")
 load("@rules_cc//cc:action_names.bzl", "ACTION_NAMES")
 load("//rust:defs.bzl", "rust_common")
-load("//rust:rust_common.bzl", "BuildInfo", "DepInfo")
+load("//rust:rust_common.bzl", "BuildInfo")
 
 # buildifier: disable=bzl-visibility
 load(
@@ -23,9 +23,82 @@ load(
     "find_toolchain",
     _name_to_crate_name = "name_to_crate_name",
 )
+load(":runfiles_enabled.bzl", "is_runfiles_enabled", "runfiles_enabled_attr")
 
 # Reexport for cargo_build_script_wrapper.bzl
 name_to_crate_name = _name_to_crate_name
+
+CargoBuildScriptRunfilesInfo = provider(
+    doc = "Info about a `cargo_build_script.script` target.",
+    fields = {
+        "data": "List[Target]: The raw `cargo_build_script_runfiles.data` attribute.",
+        "tools": "List[Target]: The raw `cargo_build_script_runfiles.tools` attribute.",
+    },
+)
+
+def _cargo_build_script_runfiles_impl(ctx):
+    script = ctx.executable.script
+
+    is_windows = script.extension == "exe"
+    exe = ctx.actions.declare_file("{}{}".format(ctx.label.name, ".exe" if is_windows else ""))
+    ctx.actions.symlink(
+        output = exe,
+        target_file = script,
+        is_executable = True,
+    )
+
+    # Tools are ommitted here because they should be within the `script`
+    # attribute's runfiles.
+    runfiles = ctx.runfiles(files = ctx.files.data)
+
+    return [
+        DefaultInfo(
+            files = depset([exe]),
+            runfiles = runfiles.merge(ctx.attr.script[DefaultInfo].default_runfiles),
+            executable = exe,
+        ),
+        CargoBuildScriptRunfilesInfo(
+            data = ctx.attr.data,
+            tools = ctx.attr.tools,
+        ),
+    ]
+
+cargo_build_script_runfiles = rule(
+    doc = """\
+A rule for producing `cargo_build_script.script` with proper runfiles.
+
+This rule ensure's the executable for `cargo_build_script` has properly formed runfiles with `cfg=target` and
+`cfg=exec` files. This is a challenge becuase had the script binary been directly consumed, it would have been
+in either configuration which would have been incorrect for either the `tools` (exec) or `data` (target) attributes.
+This is solved here by consuming the script as exec and creating a symlink to consumers of this rule can consume
+with `cfg=target` and still get an exec compatible binary.
+
+This rule may not be necessary if it becomes possible to construct runfiles trees within a rule for an action as
+we'd be able to build the correct runfiles tree and configure the script runner to run the script in the new runfiles
+directory:
+https://github.com/bazelbuild/bazel/issues/15486
+""",
+    implementation = _cargo_build_script_runfiles_impl,
+    attrs = {
+        "data": attr.label_list(
+            doc = "Data required by the build script.",
+            allow_files = True,
+        ),
+        "script": attr.label(
+            doc = "The binary script to run, generally a `rust_binary` target.",
+            executable = True,
+            mandatory = True,
+            providers = [rust_common.crate_info],
+            cfg = "exec",
+        ),
+        "tools": attr.label_list(
+            doc = "Tools required by the build script.",
+            allow_files = True,
+            cfg = "exec",
+        ),
+    },
+    executable = True,
+)
 
 def get_cc_compile_args_and_env(cc_toolchain, feature_configuration):
     """Gather cc environment variables from the given `cc_toolchain`
@@ -126,6 +199,38 @@ def _feature_enabled(ctx, feature_name, default = False):
 
     return default
 
+def _rlocationpath(file, workspace_name):
+    if file.short_path.startswith("../"):
+        return file.short_path[len("../"):]
+
+    return "{}/{}".format(workspace_name, file.short_path)
+
+def _create_runfiles_dir(ctx, script):
+    runfiles_dir = ctx.actions.declare_directory("{}.cargo_runfiles".format(ctx.label.name))
+
+    # External repos always fall into the `../` branch of `_rlocationpath`.
+    workspace_name = ctx.workspace_name
+
+    def _runfiles_map(file):
+        return "{}={}".format(file.path, _rlocationpath(file, workspace_name))
+
+    runfiles = script[DefaultInfo].default_runfiles
+
+    args = ctx.actions.args()
+    args.use_param_file("@%s", use_always = True)
+    args.add(runfiles_dir.path)
+    args.add_all(runfiles.files, map_each = _runfiles_map, allow_closure = True)
+
+    ctx.actions.run(
+        mnemonic = "CargoBuildScriptRunfilesDir",
+        executable = ctx.executable._runfiles_maker,
+        arguments = [args],
+        inputs = runfiles.files,
+        outputs = [runfiles_dir],
+    )
+
+    return runfiles_dir
+
 def _cargo_build_script_impl(ctx):
     """The implementation for the `cargo_build_script` rule.
 
@@ -136,6 +241,7 @@ def _cargo_build_script_impl(ctx):
         list: A list containing a BuildInfo provider
     """
     script = ctx.executable.script
+    script_info = ctx.attr.script[CargoBuildScriptRunfilesInfo]
     toolchain = find_toolchain(ctx)
     out_dir = ctx.actions.declare_directory(ctx.label.name + ".out_dir")
     env_out = ctx.actions.declare_file(ctx.label.name + ".env")
@@ -143,8 +249,28 @@ def _cargo_build_script_impl(ctx):
     flags_out = ctx.actions.declare_file(ctx.label.name + ".flags")
     link_flags = ctx.actions.declare_file(ctx.label.name + ".linkflags")
     link_search_paths = ctx.actions.declare_file(ctx.label.name + ".linksearchpaths")  # rustc-link-search, propagated from transitive dependencies
-    manifest_dir = "%s.runfiles/%s/%s" % (script.path, ctx.label.workspace_name or ctx.workspace_name, ctx.label.package)
     compilation_mode_opt_level = get_compilation_mode_opts(ctx, toolchain).opt_level
+
+    script_tools = []
+    script_data = []
+    for target in script_info.data:
+        script_data.append(target[DefaultInfo].files)
+        script_data.append(target[DefaultInfo].default_runfiles.files)
+    for target in script_info.tools:
+        script_tools.append(target[DefaultInfo].files)
+        script_tools.append(target[DefaultInfo].default_runfiles.files)
+
+    workspace_name = ctx.label.workspace_name
+    if not workspace_name:
+        workspace_name = ctx.workspace_name
+
+    if not is_runfiles_enabled(ctx.attr):
+        runfiles_dir = _create_runfiles_dir(ctx, ctx.attr.script)
+        script_data.append(depset([runfiles_dir]))
+        manifest_dir = "{}/{}/{}".format(runfiles_dir.path, workspace_name, ctx.label.package)
+    else:
+        script_data.append(ctx.attr.script[DefaultInfo].default_runfiles.files)
+        manifest_dir = "{}.runfiles/{}/{}".format(script.path, workspace_name, ctx.label.package)
 
     streams = struct(
         stdout = ctx.actions.declare_file(ctx.label.name + ".stdout.log"),
@@ -264,15 +390,17 @@ def _cargo_build_script_impl(ctx):
         ctx.attr.build_script_env,
         getattr(ctx.attr, "data", []) +
         getattr(ctx.attr, "compile_data", []) +
-        getattr(ctx.attr, "tools", []),
+        getattr(ctx.attr, "tools", []) +
+        script_info.data +
+        script_info.tools,
     ))
 
     tools = depset(
         direct = [
             script,
             ctx.executable._cargo_build_script_runner,
-        ] + ctx.files.data + ctx.files.tools + ([toolchain.target_json] if toolchain.target_json else []),
-        transitive = toolchain_tools,
+        ] + ([toolchain.target_json] if toolchain.target_json else []),
+        transitive = script_data + script_tools + toolchain_tools,
     )
 
     # dep_env_file contains additional environment variables coming from
@@ -294,6 +422,7 @@ def _cargo_build_script_impl(ctx):
     args.add(ctx.attr.rundir)
 
     build_script_inputs = []
+
     for dep in ctx.attr.link_deps:
         if rust_common.dep_info in dep and dep[rust_common.dep_info].dep_env:
             dep_env_file = dep[rust_common.dep_info].dep_env
@@ -315,14 +444,24 @@ def _cargo_build_script_impl(ctx):
     ctx.actions.run(
         executable = ctx.executable._cargo_build_script_runner,
         arguments = [args],
-        outputs = [out_dir, env_out, flags_out, link_flags, link_search_paths, dep_env_out, streams.stdout, streams.stderr],
+        outputs = [
+            out_dir,
+            env_out,
+            flags_out,
+            link_flags,
+            link_search_paths,
+            dep_env_out,
+            streams.stdout,
+            streams.stderr,
+        ],
         tools = tools,
         inputs = build_script_inputs,
         mnemonic = "CargoBuildScriptRun",
         progress_message = "Running Cargo build script {}".format(pkg_name),
         env = env,
         toolchain = None,
-        # Set use_default_shell_env so that $PATH is set, as tools like cmake may want to probe $PATH for helper tools.
+        # Set use_default_shell_env so that $PATH is set, as tools like Cmake
+        # may want to probe $PATH for helper tools.
         use_default_shell_env = True,
     )
 
@@ -338,7 +477,7 @@ def _cargo_build_script_impl(ctx):
             flags = flags_out,
             linker_flags = link_flags,
             link_search_paths = link_search_paths,
-            compile_data = depset([]),
+            compile_data = depset(transitive = script_data),
         ),
         OutputGroupInfo(
             streams = depset([streams.stdout, streams.stderr]),
@@ -358,10 +497,6 @@ cargo_build_script = rule(
         ),
         "crate_features": attr.string_list(
             doc = "The list of rust features that the build script should consider activated.",
-        ),
-        "data": attr.label_list(
-            doc = "Data required by the build script.",
-            allow_files = True,
         ),
         "deps": attr.label_list(
             doc = "The Rust build-dependencies of the crate",
@@ -402,14 +537,12 @@ cargo_build_script = rule(
                 file of arguments to rustc: `@$(location //package:target)`.
             """),
         ),
-        # The source of truth will be the `cargo_build_script` macro until stardoc
-        # implements documentation inheritence. See https://github.com/bazelbuild/stardoc/issues/27
         "script": attr.label(
             doc = "The binary script to run, generally a `rust_binary` target.",
             executable = True,
-            allow_files = True,
             mandatory = True,
-            cfg = "exec",
+            cfg = "target",
+            providers = [CargoBuildScriptRunfilesInfo],
         ),
         "tools": attr.label_list(
             doc = "Tools required by the build script.",
@@ -431,7 +564,14 @@ cargo_build_script = rule(
         "_experimental_symlink_execroot": attr.label(
             default = Label("//cargo/settings:experimental_symlink_execroot"),
         ),
-    },
+        "_runfiles_maker": attr.label(
+            cfg = "exec",
+            executable = True,
+            default = Label("//cargo/private/runfiles_maker"),
+        ),
+    } | runfiles_enabled_attr(
+        default = Label("//cargo/private:runfiles_enabled"),
+    ),
     fragments = ["cpp"],
     toolchains = [
         str(Label("//rust:toolchain_type")),
@@ -458,104 +598,3 @@ def name_to_pkg_name(name):
     if name.endswith("_bs"):
         return name[:-len("_bs")]
     return name
-
-def _cargo_dep_env_implementation(ctx):
-    empty_file = ctx.actions.declare_file(ctx.label.name + ".empty_file")
-    empty_dir = ctx.actions.declare_directory(ctx.label.name + ".empty_dir")
-    ctx.actions.write(
-        output = empty_file,
-        content = "",
-    )
-    ctx.actions.run(
-        outputs = [empty_dir],
-        executable = "true",
-    )
-
-    build_infos = []
-    out_dir = ctx.file.out_dir
-    if out_dir:
-        if not out_dir.is_directory:
-            fail("out_dir must be a directory artifact")
-
-        # BuildInfos in this list are collected up for all transitive cargo_build_script
-        # dependencies. This is important for any flags set in `dep_env` which reference this
-        # `out_dir`.
-        #
-        # TLDR: This BuildInfo propagates up build script dependencies.
-        build_infos.append(BuildInfo(
-            dep_env = empty_file,
-            flags = empty_file,
-            linker_flags = empty_file,
-            link_search_paths = empty_file,
-            out_dir = out_dir,
-            rustc_env = empty_file,
-            compile_data = depset([]),
-        ))
-    return [
-        DefaultInfo(files = depset(ctx.files.src)),
-        # Parts of this BuildInfo is used when building all transitive dependencies
-        # (cargo_build_script and otherwise), alongside the DepInfo. This is how other rules
-        # identify this one as a valid dependency, but we don't otherwise have a use for it.
-        #
-        # TLDR: This BuildInfo propagates up normal (non build script) depenencies.
-        #
-        # In the future, we could consider setting rustc_env here, and also propagating dep_dir
-        # so files in it can be referenced there.
-        BuildInfo(
-            dep_env = empty_file,
-            flags = empty_file,
-            linker_flags = empty_file,
-            link_search_paths = empty_file,
-            out_dir = None,
-            rustc_env = empty_file,
-            compile_data = depset([]),
-        ),
-        # Information here is used directly by dependencies, and it is an error to have more than
-        # one dependency which sets this. This is the main way to specify information from build
-        # scripts, which is what we're looking to do.
-        DepInfo(
-            dep_env = ctx.file.src,
-            direct_crates = depset(),
-            link_search_path_files = depset(),
-            transitive_build_infos = depset(direct = build_infos),
-            transitive_crate_outputs = depset(),
-            transitive_crates = depset(),
-            transitive_noncrates = depset(),
-        ),
-    ]
-
-cargo_dep_env = rule(
-    implementation = _cargo_dep_env_implementation,
-    doc = (
-        "A rule for generating variables for dependent `cargo_build_script`s " +
-        "without a build script. This is useful for using Bazel rules instead " +
-        "of a build script, while also generating configuration information " +
-        "for build scripts which depend on this crate."
-    ),
-    attrs = {
-        "out_dir": attr.label(
-            doc = dedent("""\
-                Folder containing additional inputs when building all direct dependencies.
-
-                This has the same effect as a `cargo_build_script` which prints
-                puts files into `$OUT_DIR`, but without requiring a build script.
-            """),
-            allow_single_file = True,
-            mandatory = False,
-        ),
-        "src": attr.label(
-            doc = dedent("""\
-                File containing additional environment variables to set for build scripts of direct dependencies.
-
-                This has the same effect as a `cargo_build_script` which prints
-                `cargo:VAR=VALUE` lines, but without requiring a build script.
-
-                This files should  contain a single variable per line, of format
-                `NAME=value`, and newlines may be included in a value by ending a
-                line with a trailing back-slash (`\\\\`).
-            """),
-            allow_single_file = True,
-            mandatory = True,
-        ),
-    },
-)
