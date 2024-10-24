@@ -2,7 +2,7 @@
 
 load("@rules_cc//cc:defs.bzl", "cc_library")
 load("@rules_rust//bindgen:defs.bzl", "rust_bindgen_library")
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("@rules_testing//lib:analysis_test.bzl", "analysis_test", "test_suite")
 
 def _test_cc_linkopt_impl(env, target):
@@ -65,6 +65,7 @@ def _test_cc_lib_object_merging(name):
         cc_lib = name + "_cc",
         header = "simple.h",
         tags = ["manual"],
+        edition = "2021",
     )
 
     analysis_test(
@@ -82,6 +83,7 @@ def _test_cc_lib_object_merging_disabled(name):
         header = "simple.h",
         tags = ["manual"],
         merge_cc_lib_objects_into_rlib = False,
+        edition = "2021",
     )
 
     analysis_test(
